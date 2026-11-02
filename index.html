@@ -1,0 +1,47 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>La Compét'</title>
+<style>
+:root{--bg:#f6f4ef;--ink:#1d2433;--mut:#6b7385;--card:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#161a24;--ink:#eef0f5;--mut:#98a0b3;--card:#222836}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:18px/1.45 Georgia,serif;display:flex;flex-direction:column;min-height:100vh}
+header,main,aside{width:100%;max-width:760px;margin:0 auto;padding:12px 16px}
+header{display:flex;justify-content:space-between;align-items:center;font-family:system-ui,sans-serif}
+.w{display:inline-block;width:16px;height:16px;border-radius:50%;margin-right:3px;vertical-align:middle;border:1px solid #0003}
+.chip{display:inline-block;color:#fff;padding:2px 12px;border-radius:99px;font:600 14px system-ui}
+h1{font-size:1.45em;margin:.5em 0}.o,.m{display:flex;gap:10px;align-items:center;background:var(--card);padding:12px;margin:8px 0;border-radius:10px;border:1px solid #8883}
+input[type=text],input:not([type]),select{width:100%;font:inherit;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #8886;background:var(--card);color:var(--ink)}
+input[type=checkbox]{width:22px;height:22px}button{font:600 18px system-ui;padding:14px 22px;border:0;border-radius:10px;background:var(--ink);color:var(--bg);cursor:pointer;width:100%;margin:8px 0}button:disabled{opacity:.4}
+img.q{max-width:100%;border-radius:10px}#tm{font:700 28px system-ui}ol{padding-left:24px}li{margin:4px 0}li b{float:right}.ok{color:#1c8c4a}.ko{color:#c0392b}.sol{background:var(--card);padding:12px;border-radius:10px;border-left:6px solid #2e9e5b}
+</style></head><body><header><div id=top></div><div id=tm></div></header><main id=main></main><aside id=side></aside>
+<script>
+const $=s=>document.querySelector(s),H=location.hash==='#host',esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const id=localStorage.pid||(localStorage.pid=Math.random().toString(36).slice(2));let st,key,at=0,T,rv=0;
+function apply(m){if(!H){const g=!!localStorage['got'+m.gid+m.qi];m.me=m.me?{...m.me,got:g}:localStorage.name?{name:localStorage.name,score:0,w:[],gain:0,frac:0,pos:0,got:g}:null}st=m;at=Date.now()+m.left;render()}
+const send=async o=>{try{const r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...o,id,code:localStorage.code})}),m=await r.json();if(m.err){if(H)localStorage.removeItem('code');alert(m.err)}else if(m.phase)apply(m);return m}catch(e){}};
+const tick=async()=>{clearTimeout(T);try{if(H&&!localStorage.code)localStorage.code=prompt('Code animateur')||'';const r=await fetch('/api?'+(H?'host='+encodeURIComponent(localStorage.code):'id='+id),{cache:'no-store'}),m=await r.json();if(m.err){localStorage.removeItem('code');alert(m.err)}else apply(m)}catch(e){}T=setTimeout(tick,H?1500:3000)};
+setInterval(()=>{if(!st)return;const l=at-Date.now();$('#tm').textContent=st.phase==='q'?Math.max(0,Math.ceil(l/1000))+' s':'';if(H&&st.phase==='q'&&l<-800&&!rv){rv=1;send({t:'reveal'}).then(()=>rv=0)}},250);
+const wedges=w=>st.cats.map(c=>`<i class=w title="${esc(c.name)}" style="background:${w.includes(c.id)?c.color:'#8884'}"></i>`).join('');
+const cat=()=>st.cats.find(c=>c.id===st.q.cat);
+function form(q){if(q.type==='qcm')return q.options.map((o,i)=>`<label class=o><input type=checkbox value=${i}> ${esc(o)}</label>`).join('');
+ if(q.type==='num')return '<input class=f inputmode=decimal placeholder="Votre réponse">';
+ if(q.type==='text')return Array.from({length:q.n},(_,i)=>`<input class=f placeholder="Réponse ${i+1}">`).join('');
+ return q.lefts.map(l=>`<div class=m><b>${esc(l)}</b><select class=f><option value="">—</option>${q.rights.map(r=>`<option>${esc(r)}</option>`).join('')}</select></div>`).join('')}
+function collect(q){const f=[...document.querySelectorAll('.f')].map(x=>x.value);return q.type==='qcm'?[...document.querySelectorAll('#main input:checked')].map(x=>+x.value):q.type==='num'?f[0]:f}
+function qhtml(q){const c=cat();return `<span class=chip style="background:${c.color}">${esc(c.name)}</span> <small>${st.qi+1}/${st.total} · ${q.pts} pt${q.pts>1?'s':''}</small><h1>${esc(q.text)}</h1>${q.image?`<img class=q src="${esc(q.image)}" alt="">`:''}`}
+function render(){const me=st.me,k=st.phase+st.qi+(me?1:0)+H;
+ $('#top').innerHTML=me?`<b>${esc(me.name)}</b> ${wedges(me.w)} ${me.score} pts`:'<b>La Compét\'</b>';
+ if(k!==key){key=k;let h='';
+  if(!H&&!me)h='<h1>Rejoindre la partie</h1><input id=nm placeholder="Votre prénom ou pseudo" maxlength=20><button id=go>Entrer</button>';
+  else if(st.phase==='lobby')h=`<h1>${H?'Salle d\'attente':'Vous êtes dans la partie'}</h1><p id=cnt></p>${H?'<button data-t=next>Lancer la première question</button>':'<p>L\'animateur va lancer la partie…</p>'}`;
+  else if(st.phase==='q'){h=qhtml(st.q);h+=H?'<p id=cnt></p><button data-t=reveal>Révéler la réponse</button>':(me.got?'<p>✅ Réponse envoyée. Patientez…</p>':form(st.q)+'<button id=sub>Valider</button>')}
+  else if(st.phase==='reveal'){h=qhtml(st.q)+`<div class=sol><b>Réponse :</b> ${esc(st.sol)}</div>`;
+   if(H)h+=`<button data-t=next>${st.qi+1>=st.total?'Voir le résultat final':'Question suivante'}</button>`;
+   else h+=me.frac===1?`<h1 class=ok>Bravo ! +${me.gain} pts · camembert ${esc(cat().name)} 🧀</h1>`:me.frac>0?`<h1>Partiel : +${me.gain} pts</h1>`:'<h1 class=ko>Raté, +0 pt</h1>'}
+  else h=`<h1>Partie terminée</h1>${H?'<button data-t=reset>Nouvelle partie</button>':''}`;
+  $('#main').innerHTML=h;
+  $('#go')&&($('#go').onclick=()=>{const n=$('#nm').value.trim();if(n){localStorage.name=n;send({t:'join',name:n}).then(tick)}});
+  $('#sub')&&($('#sub').onclick=()=>{localStorage['got'+st.gid+st.qi]=1;send({t:'ans',a:collect(st.q)});$('#sub').disabled=true});
+  document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>send({t:b.dataset.t}))}
+ $('#cnt')&&($('#cnt').textContent=st.phase==='q'?`${st.ans} / ${st.n} réponses`:`${st.n} joueur${st.n>1?'s':''} connecté${st.n>1?'s':''}`);
+ $('#side').innerHTML=st.phase==='lobby'?'':`<h3>Classement</h3><ol>${st.rank.map(p=>`<li>${esc(p.n)} ${wedges(p.w)}<b>${p.s}</b></li>`).join('')}</ol>`}
+if(!H&&localStorage.name)send({t:'join',name:localStorage.name});tick();
+</script></body></html>
