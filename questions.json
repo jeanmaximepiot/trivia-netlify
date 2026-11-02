@@ -1,0 +1,1 @@
+{"name":"trivia-service","version":"2.0.0","private":true,"dependencies":{"@netlify/blobs":"^8.1.0"}}
