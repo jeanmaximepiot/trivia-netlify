@@ -11,14 +11,15 @@ h1{font-size:1.45em;margin:.5em 0}.o,.m{display:flex;gap:10px;align-items:center
 input[type=text],input:not([type]),select{width:100%;font:inherit;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #8886;background:var(--card);color:var(--ink)}
 input[type=checkbox]{width:22px;height:22px}button{font:600 18px system-ui;padding:14px 22px;border:0;border-radius:10px;background:var(--ink);color:var(--bg);cursor:pointer;width:100%;margin:8px 0}button:disabled{opacity:.4}
 img.q{max-width:100%;border-radius:10px}#tm{font:700 28px system-ui}ol{padding-left:24px}li{margin:4px 0}li b{float:right}.ok{color:#1c8c4a}.ko{color:#c0392b}.sol{background:var(--card);padding:12px;border-radius:10px;border-left:6px solid #2e9e5b}
-</style></head><body><header><div id=top></div><div id=tm></div></header><main id=main></main><div id=board style="max-width:760px;width:100%;margin:0 auto;padding:0 16px"></div><aside id=side></aside>
+.bar{height:14px;border-radius:7px;background:#8883}.bar i{display:block;height:100%;border-radius:7px;background:#2e9e5b}body.scr{font-size:26px}body.scr #board svg{max-width:700px!important}.die{font-size:150px;text-align:center;line-height:1.1}.shake{animation:sh .2s infinite}@keyframes sh{0%{transform:rotate(-12deg)}50%{transform:rotate(12deg) scale(1.1)}100%{transform:rotate(-12deg)}}</style></head><body><canvas id=cf style="position:fixed;inset:0;pointer-events:none;z-index:9"></canvas><header><div id=top></div><div id=tm></div></header><main id=main></main><div id=board style="max-width:760px;width:100%;margin:0 auto;padding:0 16px"></div><aside id=side></aside>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
-const $=s=>document.querySelector(s),H=location.hash==='#host',esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=s=>document.querySelector(s),H=location.hash==='#host',SC=location.hash==='#screen',esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const id=localStorage.pid||(localStorage.pid=Math.random().toString(36).slice(2));let st,key,at=0,T,rv=0;
 function apply(m){if(!H){const g=!!localStorage['got'+m.gid+m.qi];m.me=m.me?{...m.me,got:g}:localStorage.name?{name:localStorage.name,score:0,w:[],gain:0,frac:0,pos:0,got:g}:null}st=m;at=Date.now()+m.left;render()}
 const send=async o=>{try{const r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...o,id,code:localStorage.code})}),m=await r.json();if(m.err){if(H)localStorage.removeItem('code');alert(m.err)}else if(m.phase)apply(m);return m}catch(e){}};
 const tick=async()=>{clearTimeout(T);try{if(H&&!localStorage.code)localStorage.code=prompt('Code animateur')||'';const r=await fetch('/api?'+(H?'host='+encodeURIComponent(localStorage.code):'id='+id),{cache:'no-store'}),m=await r.json();if(m.err){localStorage.removeItem('code');alert(m.err)}else apply(m)}catch(e){}T=setTimeout(tick,H?1500:3000)};
-setInterval(()=>{if(!st)return;const l=at-Date.now();$('#tm').textContent=st.phase==='q'?Math.max(0,Math.ceil(l/1000))+' s':'';if(H&&st.phase==='q'&&l<-800&&!rv){rv=1;send({t:'reveal'}).then(()=>rv=0)}},250);
+setInterval(()=>{if(!st)return;const l=at-Date.now();if(st.phase==='q'&&l>0&&l<5000&&Math.ceil(l/1000)!==lb){lb=Math.ceil(l/1000);beep(600,.08)}$('#tm').textContent=st.phase==='q'?Math.max(0,Math.ceil(l/1000))+' s':'';if(H&&st.phase==='rolled'&&l<0&&!rv){rv=1;send({t:'go'}).then(()=>rv=0)}if(H&&st.phase==='q'&&l<-800&&!rv){rv=1;send({t:'reveal'}).then(()=>rv=0)}},250);
 const wedges=w=>st.cats.map(c=>`<i class=w title="${esc(c.name)}" style="background:${w.includes(c.id)?c.color:'#8884'}"></i>`).join('');
 const cat=()=>st.cats.find(c=>c.id===st.q.cat);
 function form(q){if(q.type==='qcm')return q.options.map((o,i)=>`<label class=o><input type=checkbox value=${i}> ${esc(o)}</label>`).join('');
@@ -26,33 +27,53 @@ function form(q){if(q.type==='qcm')return q.options.map((o,i)=>`<label class=o><
  if(q.type==='text')return Array.from({length:q.n},(_,i)=>`<input class=f placeholder="Réponse ${i+1}">`).join('');
  return q.lefts.map(l=>`<div class=m><b>${esc(l)}</b><select class=f><option value="">—</option>${q.rights.map(r=>`<option>${esc(r)}</option>`).join('')}</select></div>`).join('')}
 function collect(q){const f=[...document.querySelectorAll('.f')].map(x=>x.value);return q.type==='qcm'?[...document.querySelectorAll('#main input:checked')].map(x=>+x.value):q.type==='num'?f[0]:f}
-function qhtml(q){const c=cat();return `<span class=chip style="background:${c.color}">${esc(c.name)}</span> <small>${st.qi+1}/${st.total} · ${q.pts} pt${q.pts>1?'s':''}</small><h1>${esc(q.text)}</h1>${q.image?`<img class=q src="${esc(q.image)}" alt="">`:''}`}
+function qhtml(q){const c=cat();return `<span class=chip style="background:${c.color}">${esc(c.name)}</span> <small>${st.nq}/${st.total} · ${q.pts} pt${q.pts>1?'s':''}</small><h1>${esc(q.text)}</h1>${q.image?`<img class=q src="${esc(q.image)}" alt="">`:''}`}
 function render(){const me=st.me,k=st.phase+st.qi+(me?1:0)+H;
  $('#top').innerHTML=me?`<b>${esc(me.name)}</b> ${wedges(me.w)} ${me.score} pts`:'<b>La Compét\'</b>';
  if(k!==key){key=k;let h='';
-  if(!H&&!me)h=`<h1>Rejoindre la partie</h1><input id=nm placeholder="Votre prénom ou pseudo" maxlength=20><select id=tsel>${st.teams.map(t=>`<option value=${t.i}>Équipe ${t.n}</option>`).join('')}</select><button id=go>Entrer</button>`;
-  else if(st.phase==='lobby')h=`<h1>${H?'Salle d\'attente':'Vous êtes dans la partie'}</h1><p id=cnt></p>${H?'<button data-t=next>Lancer la première question</button>':'<p>L\'animateur va lancer la partie…</p>'}`;
-  else if(st.phase==='q'){h=qhtml(st.q);h+=H?'<p id=cnt></p><button data-t=reveal>Révéler la réponse</button>':(me.got?'<p>✅ Réponse envoyée. Patientez…</p>':form(st.q)+'<button id=sub>Valider</button>')}
-  else if(st.phase==='reveal'){h=qhtml(st.q)+`<div class=sol><b>Réponse :</b> ${esc(st.sol)}</div>`;
-   if(H)h+=`<button data-t=next>${st.qi+1>=st.total?'Voir le résultat final':'Question suivante'}</button>`;
-   else h+=me.frac===1?`<h1 class=ok>Bravo ! +${me.gain} pts · camembert ${esc(cat().name)} 🧀</h1>`:me.frac>0?`<h1>Partiel : +${me.gain} pts</h1>`:'<h1 class=ko>Raté, +0 pt</h1>'}
-  else h=`<h1>Partie terminée</h1>${H?'<button data-t=reset>Nouvelle partie</button>':''}`;
+  if(!H&&!SC&&!me)h=`<h1>Rejoindre la partie</h1><input id=nm placeholder="Votre prénom ou pseudo" maxlength=20><select id=tsel>${st.teams.map(t=>`<option value=${t.i}>Équipe ${t.n}</option>`).join('')}</select><button id=go>Entrer</button>`;
+  else if(st.phase==='lobby')h=`<h1>${H?'Salle d\'attente':'Vous êtes dans la partie'}</h1><p id=cnt></p>${H||SC?'<div id=qr style="margin:12px 0"></div>':''}${H?'<hr><p>📚 Base : <b id=nb></b> questions</p><button data-b=exp style="background:#8886">Exporter en Excel</button><input type=file id=imp accept=".xlsx,.csv" style="display:none"><button data-b=imp style="background:#8886">Importer un Excel (remplace la base)</button>':''}${H?'<button data-t=next>Commencer : premier lancer de dé 🎲</button>':'<p>L\'animateur va lancer la partie…</p>'}`;
+  else if(st.phase==='q'){h=qhtml(st.q);h+=H?'<p id=cnt></p><button data-t=reveal>Révéler la réponse</button>':SC?'':(me.got?'<p>✅ Réponse envoyée. Patientez…</p>':form(st.q)+'<button id=sub>Valider</button>')}
+  else if(st.phase==='reveal'){h=qhtml(st.q)+`<div class=sol><b>Réponse :</b> ${esc(st.sol)}</div>`+dist()+(st.rollerName?`<p>🎲 L’équipe <b>${esc(st.rollerName)}</b> a remporté la question et lancera le dé.</p>`:'<p>Aucune équipe gagnante : le dé sera lancé par l’animateur.</p>');
+   if(H)h+=`<button data-t=next>Passer au lancer de dé 🎲</button><button data-t=end style="background:#8886">Terminer la partie</button>`;
+   else if(!SC)h+=me.frac===1?`<h1 class=ok>Bravo ! +${me.gain} pts · camembert ${esc(cat().name)} 🧀</h1>`:me.frac>0?`<h1>Partiel : +${me.gain} pts</h1>`:'<h1 class=ko>Raté, +0 pt</h1>'}
+  else if(st.phase==='pick'){const mine=!H&&localStorage.team!=null&&+localStorage.team!==st.fin;h=`<h1>🏁 Question finale pour l’équipe ${esc(st.finName)} !</h1><p>Les équipes adverses choisissent la catégorie.</p>`+((H||mine)?st.cats.map((c,k)=>`<button data-t=pick data-k=${k} style="background:${c.color}">${esc(c.name)}</button>`).join(''):'')}
+  else if(st.phase==='roll'){const mine=!H&&+localStorage.team===st.roller;h=`<h1>🎲 ${st.rollerName?'Équipe '+esc(st.rollerName)+', lancez le dé !':'L’animateur lance le dé'}</h1>`+((H||mine)?'<button data-t=roll>Lancer le dé 🎲</button>':'<p>En attente du lancer…</p>')}
+  else if(st.phase==='rolled'){h='<div id=die class="die shake">⚀</div><h1 id=dl style="text-align:center">…</h1>'+(H?'<button data-t=go>Afficher la question</button>':'')}
+  else{const b=st.winner!=null?st.teams[st.winner]:[...st.teams].sort((a,c)=>c.w.length-a.w.length||c.pos-a.pos)[0];h=`<h1>🏆 Équipe ${esc(b.n)} remporte la partie !</h1>${H?'<button data-t=reset>Nouvelle partie</button>':''}`}
   $('#main').innerHTML=h;
   $('#go')&&($('#go').onclick=()=>{const n=$('#nm').value.trim();if(n){localStorage.name=n;localStorage.team=$('#tsel').value;send({t:'join',name:n,team:+$('#tsel').value}).then(tick)}});
   $('#sub')&&($('#sub').onclick=()=>{localStorage['got'+st.gid+st.qi]=1;send({t:'ans',a:collect(st.q)});$('#sub').disabled=true});
-  document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>send({t:b.dataset.t}))}
- $('#cnt')&&($('#cnt').textContent=st.phase==='q'?`${st.ans} / ${st.n} réponses`:`${st.n} joueur${st.n>1?'s':''} connecté${st.n>1?'s':''}`);
+  document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>send({t:b.dataset.t,k:b.dataset.k}));bankBind();if(st.phase==='rolled'){const D=['⚀','⚁','⚂','⚃','⚄','⚅'],el=$('#die'),k=st.die.k;let n=0;const iv=setInterval(()=>{el.textContent=D[Math.floor(Math.random()*6)];beep(300+n*30,.05);if(++n>14){clearInterval(iv);el.classList.remove('shake');el.textContent=D[k];el.style.color=st.cats[k].color;$('#dl').textContent=st.cats[k].name}},130)}}
+ $('#nb')&&($('#nb').textContent=st.nb);$('#cnt')&&($('#cnt').textContent=st.phase==='q'?`${st.ans} / ${st.n} réponses`:`${st.n} joueur${st.n>1?'s':''} connecté${st.n>1?'s':''}`);
  board();$('#side').innerHTML=st.phase==='lobby'?'':`<h3>Classement</h3><ol>${st.rank.map(p=>`<li>${esc(p.n)} ${wedges(p.w)}<b>${p.s}</b></li>`).join('')}</ol>`}
 const pt=(cx,cy,r,a)=>[cx+r*Math.cos(a*Math.PI/180),cy+r*Math.sin(a*Math.PI/180)];
 const pie=(cx,cy,r,k)=>`M${cx} ${cy}L${pt(cx,cy,r,k*60-90)}A${r} ${r} 0 0 1 ${pt(cx,cy,r,k*60-30)}Z`;
 const sec=(a0,a1)=>`M${pt(200,200,182,a0)}A182 182 0 0 1 ${pt(200,200,182,a1)}L${pt(200,200,138,a1)}A138 138 0 0 0 ${pt(200,200,138,a0)}Z`;
 const pawn=t=>[0,1,2,3,4,5].map(k=>`<path d="${pie(0,0,10,k)}" fill="${t.w.includes(st.cats[k].id)?st.cats[k].color:'#ddd'}"/>`).join('')+`<circle r=10 fill=none stroke="${t.c}" stroke-width=3.5 />`;
-function board(){const el=$('#board');if(!st.teams)return;
+function board(){const el=$('#board');if(!st.teams)return;st.teams.forEach(t=>{if(pw[t.i]!==undefined&&t.w.length>pw[t.i]){confetti();beep(880,.3)}pw[t.i]=t.w.length});if(st.phase==='end'&&!pw.end){pw.end=1;confetti()}
  if(!el.firstChild){let h='<svg viewBox="0 0 400 400" style="width:100%;max-width:520px;display:block;margin:auto">';
   for(let i=0;i<36;i++)h+=`<path d="${sec(i*10-90,i*10-80)}" fill="${st.cats[i%6].color}" stroke="#fff" stroke-width="2"/>`;
   for(let k=0;k<6;k++)h+=`<path d="${pie(200,200,118,k)}" fill="${st.cats[k].color}" stroke="#fff" stroke-width="2"/>`;
   st.teams.forEach(t=>h+=`<g id=tp${t.i} style="transition:transform 1.2s ease"></g>`);el.innerHTML=h+'</svg><ul id=tl style="list-style:none;padding:0"></ul>'}
  st.teams.forEach(t=>{const g=$('#tp'+t.i),[x,y]=pt(200,200,160+(t.i%3-1)*13,t.pos%36*10-85+(t.i<3?-3:3));g.style.transform=`translate(${x}px,${y}px)`;g.innerHTML=pawn(t)});
  $('#tl').innerHTML=[...st.teams].sort((a,b)=>b.w.length-a.w.length||b.pos-a.pos).map(t=>`<li style="display:flex;gap:8px;align-items:center;margin:6px 0;${!H&&+localStorage.team===t.i?'font-weight:700':''}"><svg width=28 height=28 viewBox="-13 -13 26 26">${pawn(t)}</svg>${esc(t.n)} <small>${t.w.length}/6 camemberts · case ${t.pos}</small></li>`).join('')}
+let pw={},lb=0;const beep=(f,d)=>{try{const a=window.AC=window.AC||new AudioContext(),o=a.createOscillator(),g=a.createGain();o.frequency.value=f;g.gain.value=.08;o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+d)}catch(e){}};
+function confetti(){const c=$('#cf'),x=c.getContext('2d');c.width=innerWidth;c.height=innerHeight;const P=Array.from({length:130},()=>({x:Math.random()*c.width,y:-20,v:2+Math.random()*4,c:`hsl(${Math.random()*360},90%,55%)`}));let n=0;(function f(){x.clearRect(0,0,c.width,c.height);P.forEach(p=>{p.y+=p.v;p.x+=Math.sin(p.y/20);x.fillStyle=p.c;x.fillRect(p.x,p.y,6,10)});if(++n<160)requestAnimationFrame(f);else x.clearRect(0,0,c.width,c.height)})()}
+const norm=s=>String(s??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(),TY={qcm:'qcm',num:'nombre',text:'texte',match:'association'};
+const catOf=v=>(st.cats.find(c=>norm(c.id)===norm(v)||norm(c.name)===norm(v))||{}).id;
+const toRow=q=>({categorie:(st.cats.find(c=>c.id===q.cat)||{name:q.cat}).name,type:TY[q.type],question:q.text,points:q.pts,temps:q.time,image:q.image||'',propositions:(q.options||[]).join('|'),bonnes:(q.correct||[]).map(i=>i+1).join(','),reponse:q.answer??'',tolerance:q.tol??'',reponses:(q.slots||[]).map(s=>s.join('/')).join('|'),paires:(q.pairs||[]).map(p=>p.join('=')).join('|')});
+function fromRow(r){const type=Object.keys(TY).find(k=>norm(TY[k])===norm(r.type)||k===norm(r.type)),cat=catOf(r.categorie);if(!type||!cat||!r.question)throw new Error('ligne invalide : '+String(r.question||'').slice(0,50));
+ const q={cat,type,text:String(r.question),pts:+r.points||1,time:+r.temps||30};if(r.image)q.image=String(r.image);
+ if(type==='qcm'){q.options=String(r.propositions).split('|').map(x=>x.trim());q.correct=String(r.bonnes).split(',').map(x=>+x-1)}
+ if(type==='num'){q.answer=+String(r.reponse).replace(',','.');q.tol=+r.tolerance||0}
+ if(type==='text')q.slots=String(r.reponses).split('|').map(s=>s.split('/').map(x=>x.trim()));
+ if(type==='match')q.pairs=String(r.paires).split('|').map(p=>p.split('=').map(x=>x.trim()));return q}
+async function exportBank(){const m=await send({t:'getbank'}),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(m.bank.map(toRow)),'Questions');XLSX.writeFile(wb,'questions.xlsx')}
+async function importBank(f){try{const wb=XLSX.read(await f.arrayBuffer()),bank=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]).map(fromRow),m=await send({t:'setbank',bank});if(m&&m.ok)alert(m.ok+' questions importées')}catch(e){alert('Import impossible : '+e.message)}}
+function bankBind(){const e=$('[data-b=exp]');if(e){e.onclick=exportBank;$('[data-b=imp]').onclick=()=>$('#imp').click();$('#imp').onchange=ev=>ev.target.files[0]&&importBank(ev.target.files[0])}
+ if(window.QRCode&&$('#qr')&&!$('#qr').firstChild)new QRCode($('#qr'),{text:location.origin,width:180,height:180})}
+const dist=()=>st.dist&&st.q.options?'<h3>Réponses données</h3>'+st.q.options.map((o,i)=>{const p=st.nans?Math.round(100*st.dist[i]/st.nans):0;return`<div>${esc(o)} — ${p} %<div class=bar><i style="width:${p}%"></i></div></div>`}).join(''):'';
+document.body.classList.toggle('scr',SC);
 if(!H&&localStorage.name)send({t:'join',name:localStorage.name,team:+localStorage.team});tick();
 </script></body></html>
