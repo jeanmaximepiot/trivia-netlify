@@ -1,5 +1,6 @@
 import {getStore} from '@netlify/blobs';
 import D from '../../questions.json';
+const TEAMS=[['Scaphoïde','#e6194b'],['Lunatum','#3cb44b'],['Triquetrum','#4363d8'],['Pisiforme','#911eb4'],['Trapèze','#f58231'],['Capitatum','#555555']].map(([n,c])=>({n,c})),T0=()=>TEAMS.map((t,i)=>({i,n:t.n,c:t.c,pos:0,w:[]}));
 const QS=D.questions,CATS=D.categories,CODE=process.env.HOST_CODE||'animateur';
 const norm=s=>String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').trim();
 const lev=(a,b)=>{const d=Array.from({length:a.length+1},(_,i)=>[i,...Array(b.length).fill(0)]);for(let j=1;j<=b.length;j++)d[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length]};
@@ -16,26 +17,27 @@ const tot=p=>Object.values(p.g||{}).reduce((a,x)=>a+x.g,0),wed=p=>[...new Set(Ob
 export const config={path:'/api'};
 export default async req=>{
  const st=getStore({name:'game',consistency:'strong'}),get=k=>st.get(k,{type:'json'});
- let S=(await get('state'))||{phase:'lobby',qi:-1,end:0,gid:'0',rank:[],res:{}};
+ let S=(await get('state'))||{phase:'lobby',qi:-1,end:0,gid:'0',rank:[],res:{},teams:T0()};
  const save=()=>st.setJSON('state',S);
  const view=(host,id,x={})=>{const q=QS[S.qi],r=S.rank,i=r.findIndex(p=>p.id===id),p=r[i],res=(S.res||{})[id]||{gain:0,frac:0};
   return{phase:S.phase,qi:S.qi,gid:S.gid,total:QS.length,left:Math.max(0,S.end-Date.now()),cats:CATS,q:q&&(S.phase==='q'||S.phase==='reveal')?pub(q):null,sol:S.phase==='reveal'?sol(q):null,
-  rank:r.slice(0,host?40:8).map(({n,s,w})=>({n,s,w})),n:x.n??r.length,ans:x.ans??0,me:p?{name:p.n,score:p.s,w:p.w,gain:res.gain,frac:res.frac,pos:i+1}:null}};
+  teams:S.teams||T0(),rank:r.slice(0,host?40:8).map(({n,s,w})=>({n,s,w})),n:x.n??r.length,ans:x.ans??0,me:p?{name:p.n,score:p.s,w:p.w,gain:res.gain,frac:res.frac,pos:i+1}:null}};
  const u=new URL(req.url);
  if(req.method==='GET'){const h=u.searchParams.get('host');if(h!==null&&h!==CODE)return J({err:'Code animateur incorrect'});let x={};
   if(h!==null){const ps=await st.list({prefix:'p:'}),as=S.phase==='q'?await st.list({prefix:`a:${S.qi}:`}):{blobs:[]};x={n:ps.blobs.length,ans:as.blobs.length}}
   return J(view(h!==null,u.searchParams.get('id'),x))}
  const m=await req.json().catch(()=>({})),id=String(m.id||'').slice(0,40);
- if(m.t==='join'&&id&&m.name){const p=(await get('p:'+id))||{g:{}};await st.setJSON('p:'+id,{...p,n:String(m.name).slice(0,20)});return J({ok:1})}
+ if(m.t==='join'&&id&&m.name){const p=(await get('p:'+id))||{g:{}};await st.setJSON('p:'+id,{...p,n:String(m.name).slice(0,20),t:Number.isInteger(m.team)&&m.team>=0&&m.team<6?m.team:null});return J({ok:1})}
  if(m.t==='ans'&&id){if(S.phase!=='q'||Date.now()>S.end+1500)return J({err:'Temps écoulé'});const k=`a:${S.qi}:${id}`;if(!(await get(k)))await st.setJSON(k,{a:m.a,at:Date.now()});return J({ok:1})}
  if(m.code!==CODE)return J({err:'Code animateur incorrect'},403);
  if(m.t==='next'&&S.phase!=='q'){S=S.qi+1>=QS.length?{...S,phase:'end'}:{...S,qi:S.qi+1,phase:'q',end:Date.now()+QS[S.qi+1].time*1000};await save()}
  if(m.t==='reveal'&&S.phase==='q'){const q=QS[S.qi],res={};
-  const rank=await Promise.all((await st.list({prefix:'p:'})).blobs.map(async b=>{const pid=b.key.slice(2),p=await get(b.key),a=await get(`a:${S.qi}:${pid}`);
+  const all=await Promise.all((await st.list({prefix:'p:'})).blobs.map(async b=>{const pid=b.key.slice(2),p=await get(b.key),a=await get(`a:${S.qi}:${pid}`);
    const f=a?grade(q,a.a):0,rem=a?Math.max(0,(S.end-a.at)/(q.time*1000)):0,g=Math.round(f*q.pts*(100+100*rem));
-   p.g={...p.g,[S.qi]:{g,f,c:q.cat}};await st.setJSON(b.key,p);res[pid]={gain:g,frac:f};return{id:pid,n:p.n,s:tot(p),w:wed(p)}}));
-  rank.sort((a,b)=>b.w.length-a.w.length||b.s-a.s);S={...S,phase:'reveal',rank,res};await save()}
+   p.g={...p.g,[S.qi]:{g,f,c:q.cat}};await st.setJSON(b.key,p);res[pid]={gain:g,frac:f};return{r:{id:pid,n:p.n,s:tot(p),w:wed(p)},p}}));const rank=all.map(x=>x.r),ps=all.map(x=>x.p),T=T0(),ks=new Set(ps.flatMap(p=>Object.keys(p.g)));
+  for(const k of ks){const q2=QS[k];T.forEach((tm,i)=>{const ms=ps.filter(p=>p.t===i&&p.g[k]);if(!ms.length)return;const fr=ms.reduce((a,p)=>a+p.g[k].f,0)/ms.length,full=ms.filter(p=>p.g[k].f===1).length;tm.pos+=Math.ceil(fr*q2.pts);if(full>=Math.ceil(ms.length/2)&&!tm.w.includes(q2.cat))tm.w.push(q2.cat)})}
+  rank.sort((a,b)=>b.w.length-a.w.length||b.s-a.s);S={...S,phase:'reveal',rank,res,teams:T};await save()}
  if(m.t==='reset'){for(const b of (await st.list({prefix:'a:'})).blobs)await st.delete(b.key);
   for(const b of (await st.list({prefix:'p:'})).blobs){const p=await get(b.key);await st.setJSON(b.key,{...p,g:{}})}
-  S={phase:'lobby',qi:-1,end:0,gid:Date.now().toString(36),rank:[],res:{}};await save()}
+  S={phase:'lobby',qi:-1,end:0,gid:Date.now().toString(36),rank:[],res:{},teams:T0()};await save()}
  return J(view(true,null,{}))};
